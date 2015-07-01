@@ -11,6 +11,7 @@ const esperanto = require('esperanto');
 const browserify = require('browserify');
 const runSequence = require('run-sequence');
 const source = require('vinyl-source-stream');
+const sourcemapReporter = require("jshint-sourcemap-reporter");
 
 const manifest = require('./package.json');
 const config = manifest.babelBoilerplateOptions;
@@ -112,7 +113,7 @@ function test() {
     .pipe($.mocha({reporter: 'dot', globals: config.mochaGlobals}));
 }
 
-gulp.task('coverage', ['lint-src', 'lint-test'], function(done) {
+gulp.task('coverage', ['lint-src', 'lint-test', 'flow'], function(done) {
   require('babel/register');
   gulp.src(['src/**/*.js'])
     .pipe($.istanbul({ instrumenter: isparta.Instrumenter }))
@@ -125,7 +126,7 @@ gulp.task('coverage', ['lint-src', 'lint-test'], function(done) {
 });
 
 // Lint and run our tests
-gulp.task('test', ['lint-src', 'lint-test'], function() {
+gulp.task('test', ['lint-src', 'lint-test', 'flow'], function() {
   require('babel/register');
   return test();
 });
@@ -134,6 +135,30 @@ gulp.task('test', ['lint-src', 'lint-test'], function() {
 // the build from breaking due to poorly formatted code.
 gulp.task('build-in-sequence', function(callback) {
   runSequence(['lint-src', 'lint-test'], 'browserify', callback);
+});
+
+gulp.task('flow', function () {
+  gulp.src(['src/**/*.js'])
+    .pipe($.sourcemaps.init())
+    .pipe($.babel({ blacklist: 'flow' }))
+    .on('error', function (err) {
+      console.error(err.message);
+      this.emit('end');
+    })
+    .pipe($.plumber())
+    .pipe($.sourcemaps.write('.'))
+    .pipe($.flowtype({
+      all: false,
+      weak: false,
+      killFlow: false,
+      beep: true,
+      abort: false,
+      reporter: {
+        reporter: function (errors) {
+          return sourcemapReporter.reporter(errors, { sourceRoot: './src' });
+        }
+      }
+    }));
 });
 
 const watchFiles = ['src/**/*', 'test/**/*', 'package.json', '**/.eslintrc', '.jscsrc'];
